@@ -1,32 +1,63 @@
-# [App Name] Application Repository
+# rtsp-snapshot-processor
 
-App単体運用の場合は、.github/workflows/notify_portal.yml を削除してください。
+RTP/RTSPビデオストリームを低遅延で受信し、指定した周期でスナップショット（JPEG）を保存し、ファイルパスとタイムスタンプをSQLiteへ記録するPythonアプリケーションです。
 
-## 🛠 開発ルール (Docs as Code)
+## 特徴
+- **マルチスレッド設計**: 受信スレッドと保存処理を分離し、バッファ遅延を抑えます。
+- **拡張しやすいクラス設計**: 将来的なGPUデコードやAI推論を載せやすい構成です。
+- **自動初期化**: スナップショット保存先とSQLite DBは初回実行時に自動生成されます。
+- **GStreamer 優先**: 受信バックエンドは GStreamer を優先し、利用できない場合は OpenCV へフォールバックします。
 
-### ブランチ命名規則
+## 要件
 
-| Prefix | 用途 | SemVer影響 | 例 |
-| :--- | :--- | :--- | :--- |
-| `main` | メインブランチ | なし | `main` |
-| `develop` | ステージングブランチ | なし | `develop` |
-| `feature/` | 新機能追加 | Minor | `feature/add-login-function` |
-| `bugfix/` | バグ修正 | Patch | `bugfix/fix-crash-on-startup` |
-| `hotfix/` | 緊急修正 | Patch | `hotfix/fix-security-vulnerability` |
-| `release/` | リリース準備 | Patch/Minor | `release/v1.2.0-prep` |
-| `docs/` | ドキュメント更新のみ | Patch | `docs/update-api-docs` |
-| `chore/` | その他メンテナンス | Patch | `chore/update-dependencies` |
+- Python 3.10 以上
+- OpenCV
+- GStreamer 対応の OpenCV ビルドを推奨
+- pytest
 
-### コミットメッセージ規約
+## セットアップ
 
-- `type(scope): subject` 例: `feat(api): add login`
-- type例: feat, fix, docs, chore, refactor, test, ci
-- scopeは任意、subjectは簡潔に
+```bash
+pip install -r requirements.txt
+```
 
-### 運用のポイント
+## 設定ファイル
 
-- **Docs as Code**: コード修正時はdocs/も必ず更新
-- **main直Push禁止**: PR経由でマージ
-- **CI/CD必須**: GitHub Actions等で自動テスト・デプロイ
-- **README.md整備**: QuickStart・開発手順・依存関係を明記
-- **テンプレート活用**: PRテンプレート・Issueテンプレートを用意
+`stream_processor.toml.example` を `stream_processor.toml` にコピーして編集できます。
+`stream_processor.toml` が存在する場合、起動時に自動で読み込まれます。
+
+## 実行例
+
+```bash
+python src/stream_processor.py --config stream_processor.toml
+```
+
+CLI 引数は config ファイルの値を上書きします。
+
+## 出力
+
+- 画像は指定した保存先に JPEG 形式で保存されます。
+- SQLite DB には保存先の絶対パスと `YYYY-MM-DD HH:MM:SS.SSS` 形式のタイムスタンプが記録されます。
+
+## ドキュメント
+
+- MkDocs: [docs/index.md](docs/index.md)
+- 使用方法: [docs/usage.md](docs/usage.md)
+- テスト: [docs/testing.md](docs/testing.md)
+
+## ディレクトリ構成
+
+```text
+rtsp-snapshot-processor/
+├── docs/
+├── src/
+│   └── stream_processor.py
+├── tests/
+├── requirements.txt
+└── README.md
+```
+
+## 変更履歴の方針
+
+- 実装の詳細は docs 配下に集約します。
+- README はクイックスタートと参照先の案内に絞ります。

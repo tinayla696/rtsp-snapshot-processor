@@ -1,9 +1,6 @@
-site_name: <Application Name>
-site_description: <Application Description>
-# repo_name: <Repository Name>
-# repo_url: <Repository Link>
+site_name: rtsp-snapshot-processor
+site_description: RTP/RTSPストリームを受信し、周期スナップショットとSQLite記録を行うアプリケーション
 
-# テーマ設定
 theme:
   name: material
   language: ja
@@ -33,24 +30,23 @@ theme:
         icon: material/brightness-4
         name: ライトモードへ切り替え
 
-# 拡張機能
 markdown_extensions:
   - admonition
   - attr_list
   - md_in_html
-  - footnotes               # 脚注を使えるように
+  - footnotes
   - pymdownx.details
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.highlight:      # コードハイライトの強化
+  - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
-  - pymdownx.inlinehilite    # インラインコードのハイライト
-  - pymdownx.snippets        # 他のファイルを取り込める機能（再利用性向上）
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.emoji:
@@ -61,12 +57,11 @@ markdown_extensions:
   - toc:
       permalink: true
 
-# 外部アセット
 extra_javascript:
-  - javascripts/mathjax.js   # MathJax用のヘルパースクリプトを推奨
+  - javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
-
-# ナビゲーションメニューの設定
 nav:
   - Home: index.md
+  - Usage: usage.md
+  - Testing: testing.md

@@ -1,0 +1,10 @@
+# Copy this file to stream_processor.toml and edit values for your environment.
+
+rtsp_url = "rtsp://<camera-ip>:<port>/stream"
+snapshot_interval_sec = 5.0
+save_dir = "./snapshots"
+db_path = "./snapshot_records.db"
+capture_backend = "auto"
+gstreamer_pipeline_template = 'uridecodebin uri="{url}" ! videoconvert ! appsink max-buffers=1 drop=true sync=false'
+jpeg_quality = 95
+reconnect_delay_sec = 1.0

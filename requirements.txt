@@ -3,3 +3,9 @@ mkdocs>=1.5.0
 mkdocs-material>=9.4.0
 mkdocs-mermaid2-plugin>=1.1.1
 pymdown-extensions>=9.3
+
+# Runtime
+opencv-python>=4.10.0
+
+# Test
+pytest>=8.2.0
