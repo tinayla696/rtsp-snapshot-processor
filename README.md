@@ -61,6 +61,16 @@ CLI 引数は config ファイルの値を上書きします。
 - 使用方法: [docs/usage.md](docs/usage.md)
 - テスト: [docs/testing.md](docs/testing.md)
 
+## GitHub Pages 公開
+
+このリポジトリは GitHub Actions で MkDocs を静的サイトとしてビルドし、`main` への push 時に GitHub Pages へ自動デプロイできます。
+
+1. GitHub の `Settings > Pages > Build and deployment` で `Source` を `GitHub Actions` に設定します。
+2. `develop` から `main` へ PR をマージすると、`deploy-docs.yml` が実行されます。
+3. 公開 URL は以下です。
+
+- https://tinayla696.github.io/rtsp-snapshot-processor/
+
 ## ディレクトリ構成
 
 ```text
