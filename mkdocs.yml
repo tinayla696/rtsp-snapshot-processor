@@ -1,5 +1,8 @@
 site_name: rtsp-snapshot-processor
 site_description: RTP/RTSPストリームを受信し、周期スナップショットとSQLite記録を行うアプリケーション
+site_url: https://tinayla696.github.io/rtsp-snapshot-processor/
+repo_name: tinayla696/rtsp-snapshot-processor
+repo_url: https://github.com/tinayla696/rtsp-snapshot-processor
 
 theme:
   name: material
