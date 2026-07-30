@@ -1,0 +1,23 @@
+- name: "feature"
+  color: "a2eeef"
+  description: "新機能 (Minor Update)"
+
+- name: "bugfix"
+  color: "d73a4a"
+  description: "バグ修正 (Patch Update)"
+
+- name: "docs"
+  color: "0075ca"
+  description: "ドキュメントのみの変更"
+
+- name: "chore"
+  color: "C2E0C6"
+  description: "ビルド・設定変更など"
+
+- name: "enhancement"
+  color: "a2eeef"
+  description: "機能改善"
+
+- name: "fix"
+  color: "d73a4a"
+  description: "修正"

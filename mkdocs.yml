@@ -1,0 +1,72 @@
+site_name: <Application Name>
+site_description: <Application Description>
+# repo_name: <Repository Name>
+# repo_url: <Repository Link>
+
+# テーマ設定
+theme:
+  name: material
+  language: ja
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand       # 最初からセクションを展開しておきたい場合に便利
+    - navigation.top
+    - navigation.indexes      # セクション親要素をインデックス化
+    - navigation.tracking     # スクロールに合わせてURLを更新
+    - search.highlight
+    - search.share
+    - search.suggest          # 検索候補を表示
+    - content.code.copy
+    - content.code.annotate   # コード内の注釈機能
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: ダークモードへ切り替え
+    - scheme: slate
+      primary: indigo
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: ライトモードへ切り替え
+
+# 拡張機能
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes               # 脚注を使えるように
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:      # コードハイライトの強化
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite    # インラインコードのハイライト
+  - pymdownx.snippets        # 他のファイルを取り込める機能（再利用性向上）
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      permalink: true
+
+# 外部アセット
+extra_javascript:
+  - javascripts/mathjax.js   # MathJax用のヘルパースクリプトを推奨
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+
+# ナビゲーションメニューの設定
+nav:
+  - Home: index.md

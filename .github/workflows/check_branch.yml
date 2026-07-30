@@ -1,0 +1,19 @@
+name: Check Branch Naming
+
+on: pull_request
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if branch name is invalid
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          if [[ "$BRANCH_NAME" == "develop" ]]; then
+            echo "✅ 'develop' branch is allowed. Skipping check."
+            exit 0
+          fi
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|bugfix|docs|hotfix|chore|release)/ ]]; then
+            echo "❌ Error: Branch '$BRANCH_NAME' is invalid."
+            echo "Allowed prefixes: feature/, bugfix/, docs/, hotfix/, chore/, release/"
+            exit 1
+          fi

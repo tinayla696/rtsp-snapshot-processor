@@ -1,0 +1,36 @@
+
+name: 📝 Docs update
+description: ドキュメント更新のみ（ブランチPrefixは docs/ を推奨）
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **ブランチ命名規則**: `docs/`（SemVer: Patch）
+        例）`docs/update-api-docs`
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 更新対象 *
+      placeholder: 例）README.md のセットアップ手順を更新
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 変更内容の詳細 *
+    validations:
+      required: true
+
+  - type: dropdown
+    id: semver
+    attributes:
+      label: SemVer影響
+      options:
+        - Patch（想定）
+        - 不明
+    validations:
+      required: true

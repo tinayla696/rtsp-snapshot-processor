@@ -1,0 +1,36 @@
+
+name: 🚀 Release prep
+description: リリース準備（ブランチPrefixは release/ を推奨）
+title: "[Release]: "
+labels: ["release", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **ブランチ命名規則**: `release/`（SemVer: Patch/Minor）
+        例）`release/v1.2.0-prep`
+
+  - type: input
+    id: version
+    attributes:
+      label: 対象バージョン（SemVer）*
+      placeholder: 例）1.2.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: リリースノート下書き
+      description: 変更点サマリ/既知の問題/移行手順 等
+
+  - type: dropdown
+    id: semver
+    attributes:
+      label: SemVer影響（想定）
+      options:
+        - Minor（機能追加）
+        - Patch（修正/微調整）
+        - 不明
+    validations:
+      required: true

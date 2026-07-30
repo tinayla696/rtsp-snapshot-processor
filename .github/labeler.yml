@@ -1,0 +1,27 @@
+# ブランチ名に応じたラベル付与ルール
+
+main:
+  - head-branch: "main"
+
+develop:
+  - head-branch: "develop"
+
+feature:
+  - head-branch: ['^feature/', '^feat/']
+
+bugfix:
+  - head-branch: ['^bugfix/', '^fix/']
+
+hotfix:
+  - head-branch: ['^hotfix/', '^hf/']
+
+release:
+  - head-branch: ['^release/', '^rel/']
+
+docs:
+  - head-branch: ['^docs/', '^doc/']
+  - changed-files:
+       - any-glob-to-any-file: ['docs/**', '*.md']
+
+chore:
+  - head-branch: ['^chore/', '^ch/']

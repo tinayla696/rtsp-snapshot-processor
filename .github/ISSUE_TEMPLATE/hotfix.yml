@@ -1,0 +1,34 @@
+
+name: 🔥 Hotfix
+description: 緊急修正（ブランチPrefixは hotfix/ を推奨）
+title: "[Hotfix]: "
+labels: ["hotfix", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **ブランチ命名規則**: `hotfix/`（SemVer: Patch）
+        例）`hotfix/fix-security-vulnerability`
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 緊急修正の概要 *
+    validations:
+      required: true
+
+  - type: textarea
+    id: risk
+    attributes:
+      label: 影響/リスク評価
+      placeholder: 例）回避策の有無、セキュリティ影響 等
+
+  - type: dropdown
+    id: semver
+    attributes:
+      label: SemVer影響（想定）
+      options:
+        - Patch（想定）
+        - 不明
+    validations:
+      required: true

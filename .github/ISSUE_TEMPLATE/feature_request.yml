@@ -1,0 +1,44 @@
+
+name: 💡 Feature request
+description: 機能追加・改善（ブランチPrefixは feature/ を推奨）
+title: "[Feat]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **ブランチ命名規則**: `feature/`（SemVer: Minor）
+        例）`feature/add-login-function`
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 背景・課題 *
+      description: 現状の課題/不便
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案内容 *
+      description: 望む解決策や機能
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範囲
+      placeholder: 例）月間1,000ユーザーに影響
+
+  - type: dropdown
+    id: semver
+    attributes:
+      label: SemVer影響（自己評価）
+      options:
+        - Minor（想定）
+        - Patch
+        - 不明
+    validations:
+      required: true

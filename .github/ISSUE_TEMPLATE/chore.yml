@@ -1,0 +1,28 @@
+
+name: 🧹 Chore
+description: メンテナンス作業（ブランチPrefixは chore/ を推奨）
+title: "[Chore]: "
+labels: ["chore", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **ブランチ命名規則**: `chore/`（SemVer: Patch）
+        例）`chore/update-dependencies`
+
+  - type: textarea
+    id: task
+    attributes:
+      label: 作業内容 *
+    validations:
+      required: true
+
+  - type: dropdown
+    id: semver
+    attributes:
+      label: SemVer影響
+      options:
+        - Patch（想定）
+        - 不明
+    validations:
+      required: true
