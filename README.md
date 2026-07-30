@@ -1,5 +1,12 @@
 # rtsp-snapshot-processor
 
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![OpenCV](https://img.shields.io/badge/OpenCV-Image%20Processing-5C3EE8?logo=opencv&logoColor=white)](https://opencv.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![pytest](https://img.shields.io/badge/pytest-Test%20Suite-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![MkDocs](https://img.shields.io/badge/MkDocs-Documentation-526CFE?logo=materialformkdocs&logoColor=white)](https://www.mkdocs.org/)
+[![GStreamer](https://img.shields.io/badge/GStreamer-Streaming-FF7F00?logo=gstreamer&logoColor=white)](https://gstreamer.freedesktop.org/)
+
 RTP/RTSPビデオストリームを低遅延で受信し、指定した周期でスナップショット（JPEG）を保存し、ファイルパスとタイムスタンプをSQLiteへ記録するPythonアプリケーションです。
 
 ## 特徴
@@ -21,6 +28,13 @@ RTP/RTSPビデオストリームを低遅延で受信し、指定した周期で
 pip install -r requirements.txt
 ```
 
+## ローカル検証環境
+
+Linux で GStreamer の動作確認を行う場合は、`/usr/bin/python3` と distro 版の `python3-opencv` を使う構成が必要です。
+pip 版の OpenCV wheel は GStreamer 無効のことがあるため、`venv` だけでは再現できない場合があります。
+
+本番の Windows 11 環境では、`Ctrl+C` で停止できるようにアプリ側でシグナル処理と `KeyboardInterrupt` の両方に対応しています。
+
 ## 設定ファイル
 
 `stream_processor.toml.example` を `stream_processor.toml` にコピーして編集できます。
@@ -41,6 +55,8 @@ CLI 引数は config ファイルの値を上書きします。
 
 ## ドキュメント
 
+- [アーキテクチャ](docs/architecture.md)
+- [AI ガイドライン](docs/ai_guidelines.md)
 - MkDocs: [docs/index.md](docs/index.md)
 - 使用方法: [docs/usage.md](docs/usage.md)
 - テスト: [docs/testing.md](docs/testing.md)

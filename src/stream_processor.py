@@ -8,11 +8,15 @@ import signal
 import sqlite3
 import threading
 import time
-import tomllib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+try:
+    import tomllib
+except ImportError:  # Python 3.10 fallback
+    import tomli as tomllib
 
 import cv2
 
@@ -57,16 +61,30 @@ class SnapshotRepository:
             );
             """
         )
+        self._ensure_status_column()
         self._connection.commit()
 
-    def add_snapshot_record(self, file_path: Path, timestamp_text: str) -> None:
+    def _ensure_status_column(self) -> None:
+        if self._connection is None:
+            raise RuntimeError("SQLite connection is not initialized.")
+
+        columns = {
+            row[1]
+            for row in self._connection.execute("PRAGMA table_info(snapshots);").fetchall()
+        }
+        if "status" not in columns:
+            self._connection.execute(
+                "ALTER TABLE snapshots ADD COLUMN status INTEGER NOT NULL DEFAULT 1;"
+            )
+
+    def add_snapshot_record(self, file_path: Path, timestamp_text: str, status: bool) -> None:
         if self._connection is None:
             raise RuntimeError("SQLite connection is not initialized.")
 
         with self._lock:
             self._connection.execute(
-                "INSERT INTO snapshots (file_path, timestamp) VALUES (?, ?);",
-                (str(file_path.resolve()), timestamp_text),
+                "INSERT INTO snapshots (file_path, timestamp, status) VALUES (?, ?, ?);",
+                (str(file_path.resolve()), timestamp_text, int(status)),
             )
             self._connection.commit()
 
@@ -238,7 +256,10 @@ class SnapshotService:
             if frame is None:
                 logging.debug("Snapshot skipped because frame is not ready.")
             else:
-                self._persist_snapshot(frame)
+                try:
+                    self._persist_snapshot(frame)
+                except Exception:
+                    logging.exception("Snapshot persistence failed; continuing execution.")
 
             next_tick += self._snapshot_interval_sec
             if next_tick < time.monotonic():
@@ -257,9 +278,10 @@ class SnapshotService:
         )
         if not ok:
             logging.error("Failed to write snapshot: %s", file_path)
+            self._repository.add_snapshot_record(file_path, ts_for_db, False)
             return
 
-        self._repository.add_snapshot_record(file_path, ts_for_db)
+        self._repository.add_snapshot_record(file_path, ts_for_db, True)
         logging.info("Snapshot saved: %s (%s)", file_path, ts_for_db)
 
 
@@ -288,6 +310,9 @@ class StreamProcessorApplication:
         logging.info("Application started. Press Ctrl+C to stop.")
         try:
             self._snapshot_service.run()
+        except KeyboardInterrupt:
+            logging.info("Ctrl+C received. Stopping application...")
+            self._shutdown_event.set()
         finally:
             self._shutdown()
 
@@ -319,7 +344,11 @@ def parse_args() -> AppConfig:
 
     bootstrap_args, _unknown = bootstrap_parser.parse_known_args()
     config_path = _resolve_config_path(bootstrap_args.config)
-    config_data = _load_toml_config(config_path) if config_path is not None else {}
+    try:
+        config_data = _load_toml_config(config_path) if config_path is not None else {}
+    except (FileNotFoundError, tomllib.TOMLDecodeError, ValueError) as exc:
+        bootstrap_parser.error(str(exc))
+        raise AssertionError("unreachable") from exc
 
     parser = argparse.ArgumentParser(
         parents=[bootstrap_parser],
@@ -413,11 +442,13 @@ def _resolve_config_path(config_arg: Optional[str]) -> Optional[Path]:
 
 
 def _load_toml_config(config_path: Path) -> dict[str, object]:
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with config_path.open("rb") as file_handle:
-        data = tomllib.load(file_handle)
+    try:
+        with config_path.open("rb") as file_handle:
+            data = tomllib.load(file_handle)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"Config file not found: {config_path}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"Invalid TOML config: {config_path}") from exc
 
     if not isinstance(data, dict):
         raise ValueError("Config file must contain a TOML table at the root.")

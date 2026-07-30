@@ -12,10 +12,10 @@ import stream_processor as sp
 
 class DummyRepository:
     def __init__(self) -> None:
-        self.records: list[tuple[Path, str]] = []
+        self.records: list[tuple[Path, str, bool]] = []
 
-    def add_snapshot_record(self, file_path: Path, timestamp_text: str) -> None:
-        self.records.append((file_path, timestamp_text))
+    def add_snapshot_record(self, file_path: Path, timestamp_text: str, status: bool) -> None:
+        self.records.append((file_path, timestamp_text, status))
 
 
 class FixedDatetime(datetime):
@@ -50,17 +50,17 @@ def test_snapshot_repository_creates_db_and_persists_absolute_path(tmp_path: Pat
     image_path = tmp_path / "snapshot.jpg"
     image_path.write_bytes(b"dummy")
 
-    repository.add_snapshot_record(image_path, "2026-07-30 12:34:56.789")
+    repository.add_snapshot_record(image_path, "2026-07-30 12:34:56.789", True)
     repository.close()
 
     assert db_path.exists()
 
     with sqlite3.connect(db_path) as connection:
         row = connection.execute(
-            "SELECT file_path, timestamp FROM snapshots ORDER BY id DESC LIMIT 1"
+            "SELECT file_path, timestamp, status FROM snapshots ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
-    assert row == (str(image_path.resolve()), "2026-07-30 12:34:56.789")
+    assert row == (str(image_path.resolve()), "2026-07-30 12:34:56.789", 1)
 
 
 def test_snapshot_service_writes_jpeg_and_registers_record(monkeypatch, tmp_path: Path) -> None:
@@ -90,8 +90,34 @@ def test_snapshot_service_writes_jpeg_and_registers_record(monkeypatch, tmp_path
     assert saved_path.is_absolute()
     assert saved_path.suffix == ".jpg"
     assert repository.records == [
-        (saved_path, "2026-07-30 12:34:56.789")
+        (saved_path, "2026-07-30 12:34:56.789", True)
     ]
+
+
+def test_snapshot_service_registers_false_status_when_write_fails(monkeypatch, tmp_path: Path) -> None:
+    repository = DummyRepository()
+    receiver = object()
+    service = sp.SnapshotService(
+        receiver=receiver,
+        repository=repository,
+        save_dir=tmp_path,
+        snapshot_interval_sec=5.0,
+        jpeg_quality=90,
+    )
+
+    def fake_imwrite(path: str, frame, params):
+        return False
+
+    monkeypatch.setattr(sp.cv2, "imwrite", fake_imwrite)
+    monkeypatch.setattr(sp, "datetime", FixedDatetime)
+
+    service._persist_snapshot("frame-bytes")
+
+    assert len(repository.records) == 1
+    file_path, timestamp_text, status = repository.records[0]
+    assert file_path.is_absolute()
+    assert timestamp_text == "2026-07-30 12:34:56.789"
+    assert status is False
 
 
 def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
