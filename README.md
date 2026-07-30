@@ -28,6 +28,13 @@ RTP/RTSPビデオストリームを低遅延で受信し、指定した周期で
 pip install -r requirements.txt
 ```
 
+## ローカル検証環境
+
+Linux で GStreamer の動作確認を行う場合は、`/usr/bin/python3` と distro 版の `python3-opencv` を使う構成が必要です。
+pip 版の OpenCV wheel は GStreamer 無効のことがあるため、`venv` だけでは再現できない場合があります。
+
+本番の Windows 11 環境では、`Ctrl+C` で停止できるようにアプリ側でシグナル処理と `KeyboardInterrupt` の両方に対応しています。
+
 ## 設定ファイル
 
 `stream_processor.toml.example` を `stream_processor.toml` にコピーして編集できます。
@@ -48,6 +55,8 @@ CLI 引数は config ファイルの値を上書きします。
 
 ## ドキュメント
 
+- [アーキテクチャ](docs/architecture.md)
+- [AI ガイドライン](docs/ai_guidelines.md)
 - MkDocs: [docs/index.md](docs/index.md)
 - 使用方法: [docs/usage.md](docs/usage.md)
 - テスト: [docs/testing.md](docs/testing.md)

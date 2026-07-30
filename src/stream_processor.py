@@ -61,16 +61,30 @@ class SnapshotRepository:
             );
             """
         )
+        self._ensure_status_column()
         self._connection.commit()
 
-    def add_snapshot_record(self, file_path: Path, timestamp_text: str) -> None:
+    def _ensure_status_column(self) -> None:
+        if self._connection is None:
+            raise RuntimeError("SQLite connection is not initialized.")
+
+        columns = {
+            row[1]
+            for row in self._connection.execute("PRAGMA table_info(snapshots);").fetchall()
+        }
+        if "status" not in columns:
+            self._connection.execute(
+                "ALTER TABLE snapshots ADD COLUMN status INTEGER NOT NULL DEFAULT 1;"
+            )
+
+    def add_snapshot_record(self, file_path: Path, timestamp_text: str, status: bool) -> None:
         if self._connection is None:
             raise RuntimeError("SQLite connection is not initialized.")
 
         with self._lock:
             self._connection.execute(
-                "INSERT INTO snapshots (file_path, timestamp) VALUES (?, ?);",
-                (str(file_path.resolve()), timestamp_text),
+                "INSERT INTO snapshots (file_path, timestamp, status) VALUES (?, ?, ?);",
+                (str(file_path.resolve()), timestamp_text, int(status)),
             )
             self._connection.commit()
 
@@ -264,9 +278,10 @@ class SnapshotService:
         )
         if not ok:
             logging.error("Failed to write snapshot: %s", file_path)
+            self._repository.add_snapshot_record(file_path, ts_for_db, False)
             return
 
-        self._repository.add_snapshot_record(file_path, ts_for_db)
+        self._repository.add_snapshot_record(file_path, ts_for_db, True)
         logging.info("Snapshot saved: %s (%s)", file_path, ts_for_db)
 
 
@@ -295,6 +310,9 @@ class StreamProcessorApplication:
         logging.info("Application started. Press Ctrl+C to stop.")
         try:
             self._snapshot_service.run()
+        except KeyboardInterrupt:
+            logging.info("Ctrl+C received. Stopping application...")
+            self._shutdown_event.set()
         finally:
             self._shutdown()
 

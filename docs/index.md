@@ -13,6 +13,8 @@ RTP/RTSP 配信を受信して、一定周期で最新フレームを JPEG と�
 
 ## 参照ページ
 
+- [アーキテクチャ](architecture.md)
+- [AI ガイドライン](ai_guidelines.md)
 - [使用方法](usage.md)
 - [テスト](testing.md)
 
