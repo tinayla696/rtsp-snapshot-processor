@@ -1,5 +1,12 @@
 # rtsp-snapshot-processor
 
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![OpenCV](https://img.shields.io/badge/OpenCV-Image%20Processing-5C3EE8?logo=opencv&logoColor=white)](https://opencv.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![pytest](https://img.shields.io/badge/pytest-Test%20Suite-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![MkDocs](https://img.shields.io/badge/MkDocs-Documentation-526CFE?logo=materialformkdocs&logoColor=white)](https://www.mkdocs.org/)
+[![GStreamer](https://img.shields.io/badge/GStreamer-Streaming-FF7F00?logo=gstreamer&logoColor=white)](https://gstreamer.freedesktop.org/)
+
 RTP/RTSPビデオストリームを低遅延で受信し、指定した周期でスナップショット（JPEG）を保存し、ファイルパスとタイムスタンプをSQLiteへ記録するPythonアプリケーションです。
 
 ## 特徴

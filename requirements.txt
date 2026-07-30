@@ -6,6 +6,7 @@ pymdown-extensions>=9.3
 
 # Runtime
 opencv-python>=4.10.0
+tomli; python_version < "3.11"
 
 # Test
 pytest>=8.2.0
