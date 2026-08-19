@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import signal
 import sqlite3
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +35,7 @@ class AppConfig:
     gstreamer_pipeline_template: Optional[str] = None
     jpeg_quality: int = 95
     reconnect_delay_sec: float = 1.0
+    notification_url: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -223,6 +227,46 @@ class FrameReceiver:
                 self._latest_frame = frame
 
 
+class ExternalNotifier:
+    def __init__(self, notification_url: Optional[str]) -> None:
+        self._notification_url = (
+            notification_url.strip() if notification_url is not None and notification_url.strip() else None
+        )
+
+    def notify(self, file_path: Path, timestamp_text: str) -> None:
+        if self._notification_url is None:
+            return
+
+        payload = {
+            "file_path": str(file_path.resolve()),
+            "timestamp": timestamp_text,
+        }
+        request = urllib.request.Request(
+            self._notification_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                if getattr(response, "status", 200) >= 400:
+                    raise urllib.error.HTTPError(
+                        request.full_url,
+                        response.status,
+                        response.reason,
+                        response.headers,
+                        fp=response
+                    )
+        except Exception:
+            logging.exception(
+                "Failed to notify external API at %s for snapshot %s (%s)",
+                self._notification_url,
+                file_path,
+                timestamp_text,
+            )
+
+
 class SnapshotService:
     def __init__(
         self,
@@ -231,12 +275,14 @@ class SnapshotService:
         save_dir: Path,
         snapshot_interval_sec: float,
         jpeg_quality: int = 95,
+        notifier: Optional[ExternalNotifier] = None,
     ) -> None:
         self._receiver = receiver
         self._repository = repository
         self._save_dir = save_dir.resolve()
         self._snapshot_interval_sec = snapshot_interval_sec
         self._jpeg_quality = jpeg_quality
+        self._notifier = notifier
         self._stop_event = threading.Event()
 
         self._save_dir.mkdir(parents=True, exist_ok=True)
@@ -282,6 +328,8 @@ class SnapshotService:
             return
 
         self._repository.add_snapshot_record(file_path, ts_for_db, True)
+        if self._notifier is not None:
+            self._notifier.notify(file_path, ts_for_db)
         logging.info("Snapshot saved: %s (%s)", file_path, ts_for_db)
 
 
@@ -301,6 +349,7 @@ class StreamProcessorApplication:
             save_dir=config.save_dir,
             snapshot_interval_sec=config.snapshot_interval_sec,
             jpeg_quality=config.jpeg_quality,
+            notifier=ExternalNotifier(config.notification_url),
         )
         self._shutdown_event = threading.Event()
 
@@ -395,6 +444,11 @@ def parse_args() -> AppConfig:
         help="Delay before reconnect attempt when stream is disconnected",
     )
     parser.add_argument(
+        "--notification-url",
+        default=config_data.get("notification_url"),
+        help="Optional external HTTP endpoint receiving JSON payloads with file_path and timestamp when snapshots are saved.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -427,6 +481,7 @@ def parse_args() -> AppConfig:
         gstreamer_pipeline_template=args.gstreamer_pipeline_template,
         jpeg_quality=args.jpeg_quality,
         reconnect_delay_sec=args.reconnect_delay,
+        notification_url=args.notification_url,
     )
 
 

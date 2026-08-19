@@ -8,3 +8,4 @@ capture_backend = "auto"
 gstreamer_pipeline_template = 'uridecodebin uri="{url}" ! videoconvert ! appsink max-buffers=1 drop=true sync=false'
 jpeg_quality = 95
 reconnect_delay_sec = 1.0
+notification_url = "https://example.com/notify"

@@ -120,6 +120,36 @@ def test_snapshot_service_registers_false_status_when_write_fails(monkeypatch, t
     assert status is False
 
 
+def test_snapshot_service_notifies_external_api_after_success(monkeypatch, tmp_path: Path) -> None:
+    repository = DummyRepository()
+    receiver = object()
+    notifications: list[tuple[Path, str]] = []
+
+    class StubNotifier:
+        def notify(self, file_path: Path, timestamp_text: str) -> None:
+            notifications.append((file_path, timestamp_text))
+
+    service = sp.SnapshotService(
+        receiver=receiver,
+        repository=repository,
+        save_dir=tmp_path,
+        snapshot_interval_sec=5.0,
+        jpeg_quality=90,
+        notifier=StubNotifier(),
+    )
+
+    monkeypatch.setattr(sp.cv2, "imwrite", lambda *args, **kwargs: True)
+    monkeypatch.setattr(sp, "datetime", FixedDatetime)
+
+    service._persist_snapshot("frame-bytes")
+
+    assert len(repository.records) == 1
+    assert len(notifications) == 1
+    file_path, timestamp_text = notifications[0]
+    assert file_path == repository.records[0][0]
+    assert timestamp_text == "2026-07-30 12:34:56.789"
+
+
 def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
@@ -138,6 +168,8 @@ def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
             "88",
             "--reconnect-delay",
             "1.5",
+            "--notification-url",
+            "https://example.test/notify",
             "--log-level",
             "DEBUG",
         ],
@@ -152,6 +184,7 @@ def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
     assert config.capture_backend == "auto"
     assert config.jpeg_quality == 88
     assert config.reconnect_delay_sec == 1.5
+    assert config.notification_url == "https://example.test/notify"
 
 
 def test_parse_args_loads_values_from_toml_config(tmp_path: Path, monkeypatch) -> None:
