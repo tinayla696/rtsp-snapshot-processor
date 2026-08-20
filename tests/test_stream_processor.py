@@ -187,6 +187,75 @@ def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
     assert config.notification_url == "https://example.test/notify"
 
 
+def test_parse_args_supports_rtp_without_rtsp_url(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "stream_processor.py",
+            "--capture-backend",
+            "rtp",
+            "--rtp-port",
+            "5004",
+            "--rtp-width",
+            "1280",
+            "--rtp-height",
+            "720",
+        ],
+    )
+
+    config = sp.parse_args()
+
+    assert config.capture_backend == "rtp"
+    assert config.rtsp_url == ""
+    assert config.rtp_port == 5004
+    assert config.rtp_width == 1280
+    assert config.rtp_height == 720
+
+
+def test_frame_receiver_builds_h264_rtp_sdp() -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        rtp_port=5004,
+        rtp_payload_type=96,
+        rtp_clock_rate=90000,
+    )
+
+    sdp = receiver._build_rtp_sdp()
+
+    assert "m=video 5004 RTP/AVP 96" in sdp
+    assert "a=rtpmap:96 H264/90000" in sdp
+    assert "a=fmtp:96 packetization-mode=1" in sdp
+
+
+def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(monkeypatch) -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        reconnect_delay_sec=0.001,
+    )
+    receiver._rtp_process = object()
+    open_calls = 0
+
+    def fail_if_reopened() -> bool:
+        nonlocal open_calls
+        open_calls += 1
+        return False
+
+    monkeypatch.setattr(receiver, "_open_capture", fail_if_reopened)
+    monkeypatch.setattr(receiver, "_read_rtp_frame", lambda: None)
+
+    def stop_after_one_release() -> None:
+        receiver._rtp_process = None
+        receiver._stop_event.set()
+
+    monkeypatch.setattr(receiver, "_release_rtp_process", stop_after_one_release)
+    receiver._run()
+
+    assert open_calls == 0
+
+
 def test_parse_args_loads_values_from_toml_config(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "stream_processor.toml"
     config_path.write_text(
