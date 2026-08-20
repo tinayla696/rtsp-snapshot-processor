@@ -160,9 +160,10 @@ class FrameReceiver:
 
     def stop(self) -> None:
         self._stop_event.set()
-        self._release_capture()
         self._release_rtp_process()
         self._thread.join(timeout=5.0)
+        self._release_capture()
+        self._release_rtp_process()
 
     def get_latest_frame(self):
         with self._lock:
@@ -232,7 +233,6 @@ class FrameReceiver:
                 command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
             )
             if process.stdin is None or process.stdout is None:
                 process.kill()

@@ -41,7 +41,7 @@ cp stream_processor.toml.example stream_processor.toml
 外部端末 -- RTP/UDP:5004 --> Docker実行ホストのLAN IP:5004 --> appコンテナ:5004
 ```
 
-`capture_backend=rtp` を指定すると、`FrameReceiver` がFFmpegを使ってH.264 RTP/UDPを受信・デコードします。`capture_backend=rtsp` 相当の既存経路では、従来どおり `cv2.VideoCapture()` によるRTSP入力を使用します。
+`capture_backend=rtp` を指定すると、`FrameReceiver` がFFmpegを使ってH.264 RTP/UDPを受信・デコードします。RTSP入力は `capture_backend=auto`、`gstreamer`、または `opencv` を使用し、従来どおり `cv2.VideoCapture()` で処理します。
 
 ## 3. 実行
 
