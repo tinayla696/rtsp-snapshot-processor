@@ -146,9 +146,9 @@ class FrameReceiver:
 
     def stop(self) -> None:
         self._stop_event.set()
-        self._thread.join(timeout=5.0)
         self._release_capture()
         self._release_rtp_process()
+        self._thread.join(timeout=5.0)
 
     def get_latest_frame(self):
         with self._lock:
