@@ -310,7 +310,7 @@ class FrameReceiver:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            if self._capture is None and not self._open_capture():
+            if self._capture is None and self._rtp_process is None and not self._open_capture():
                 time.sleep(self._reconnect_delay_sec)
                 continue
 
