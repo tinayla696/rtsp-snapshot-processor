@@ -229,6 +229,33 @@ def test_frame_receiver_builds_h264_rtp_sdp() -> None:
     assert "a=fmtp:96 packetization-mode=1" in sdp
 
 
+def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(monkeypatch) -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        reconnect_delay_sec=0.001,
+    )
+    receiver._rtp_process = object()
+    open_calls = 0
+
+    def fail_if_reopened() -> bool:
+        nonlocal open_calls
+        open_calls += 1
+        return False
+
+    monkeypatch.setattr(receiver, "_open_capture", fail_if_reopened)
+    monkeypatch.setattr(receiver, "_read_rtp_frame", lambda: None)
+
+    def stop_after_one_release() -> None:
+        receiver._rtp_process = None
+        receiver._stop_event.set()
+
+    monkeypatch.setattr(receiver, "_release_rtp_process", stop_after_one_release)
+    receiver._run()
+
+    assert open_calls == 0
+
+
 def test_parse_args_loads_values_from_toml_config(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "stream_processor.toml"
     config_path.write_text(
