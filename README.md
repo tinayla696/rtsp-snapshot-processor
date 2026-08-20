@@ -35,6 +35,15 @@ pip 版の OpenCV wheel は GStreamer 無効のことがあるため、`venv` �
 
 本番の Windows 11 環境では、`Ctrl+C` で停止できるようにアプリ側でシグナル処理と `KeyboardInterrupt` の両方に対応しています。
 
+## 運用方式
+
+- 本番: Windows 11上のPythonアプリ + Windows版FFmpeg
+- テスト: Docker Compose + test-api
+- RTP受信: H.264 RTP/UDP、Win11またはDockerホストのUDP `5004`
+- 通知: 保存成功時に外部APIへ `POST /notify`
+
+本番のセットアップ、Firewall、Windowsサービス化、SQLiteの起動時リセット仕様は[デプロイと運用](docs/deployment.md)を参照してください。
+
 ## 設定ファイル
 
 `stream_processor.toml.example` を `stream_processor.toml` にコピーして編集できます。
@@ -56,6 +65,7 @@ CLI 引数は config ファイルの値を上書きします。
 ## ドキュメント
 
 - [アーキテクチャ](docs/architecture.md)
+- [デプロイと運用](docs/deployment.md)
 - [AI ガイドライン](docs/ai_guidelines.md)
 - MkDocs: [docs/index.md](docs/index.md)
 - 使用方法: [docs/usage.md](docs/usage.md)

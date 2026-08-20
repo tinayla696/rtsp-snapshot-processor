@@ -1,0 +1,67 @@
+services:
+  test-api:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./docker:/app
+      - ./docker-data/test-api:/data
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      NOTIFY_LOG_PATH: /data/notifications.log
+    command: python /app/test_api_server.py
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      test-api:
+        condition: service_healthy
+    environment:
+      RTSP_URL: ${RTSP_URL:-}
+      NOTIFICATION_URL: ${NOTIFICATION_URL:-http://test-api:8000/notify}
+      SAVE_DIR: /data/snapshots
+      DB_PATH: /data/snapshot_records.db
+      SNAPSHOT_INTERVAL_SEC: ${SNAPSHOT_INTERVAL_SEC:-5}
+      CAPTURE_BACKEND: ${CAPTURE_BACKEND:-rtp}
+      JPEG_QUALITY: ${JPEG_QUALITY:-90}
+      RECONNECT_DELAY_SEC: ${RECONNECT_DELAY_SEC:-1}
+      RTP_PORT: ${RTP_PORT:-5004}
+      RTP_PAYLOAD_TYPE: ${RTP_PAYLOAD_TYPE:-96}
+      RTP_CLOCK_RATE: ${RTP_CLOCK_RATE:-90000}
+      RTP_WIDTH: ${RTP_WIDTH:-1280}
+      RTP_HEIGHT: ${RTP_HEIGHT:-720}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/workspace
+      - ./docker-data:/data
+    ports:
+      - "5004:5004/udp"
+    working_dir: /workspace
+    command: >
+      sh -c "python src/stream_processor.py
+      --rtsp-url \"$$RTSP_URL\"
+      --notification-url \"$$NOTIFICATION_URL\"
+      --save-dir \"$$SAVE_DIR\"
+      --db-path \"$$DB_PATH\"
+      --snapshot-interval \"$$SNAPSHOT_INTERVAL_SEC\"
+      --capture-backend \"$$CAPTURE_BACKEND\"
+      --jpeg-quality \"$$JPEG_QUALITY\"
+      --reconnect-delay \"$$RECONNECT_DELAY_SEC\"
+      --rtp-port \"$$RTP_PORT\"
+      --rtp-payload-type \"$$RTP_PAYLOAD_TYPE\"
+      --rtp-clock-rate \"$$RTP_CLOCK_RATE\"
+      --rtp-width \"$$RTP_WIDTH\"
+      --rtp-height \"$$RTP_HEIGHT\"
+      --log-level \"$$LOG_LEVEL\""
+    restart: unless-stopped

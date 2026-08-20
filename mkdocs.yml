@@ -67,6 +67,8 @@ extra_javascript:
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - Deployment: deployment.md
+  - External API: api-spec.md
   - AI Guidelines: ai_guidelines.md
   - Usage: usage.md
   - Testing: testing.md

@@ -5,7 +5,8 @@ mkdocs-mermaid2-plugin>=1.1.1
 pymdown-extensions>=9.3
 
 # Runtime
-opencv-python>=4.10.0
+opencv-python-headless>=4.10.0
+numpy>=2.0.0
 tomli; python_version < "3.11"
 
 # Test

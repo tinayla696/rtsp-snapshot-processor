@@ -6,6 +6,8 @@
 特に、Intel Core Ultra 9 と NVIDIA GeForce RTX 5080 のような余力の大きい環境では、
 CPU/GPU の将来拡張を阻害しないように、受信処理と保存処理の責務を分離しています。
 
+本番はWindows 11上でPythonアプリとWindows版FFmpegを直接実行します。Docker Composeはテスト環境で使用し、同じRTP受信・スナップショット・API通知経路を再現します。
+
 重要なのは「単純に高速であること」ではなく、「ストリーム断・ディスク障害・設定ミスが起きても
 処理全体を落とさずに復旧しやすいこと」です。
 
@@ -27,6 +29,7 @@ CPU/GPU の将来拡張を阻害しないように、受信処理と保存処理
 
 SQLite の接続と `snapshots` テーブルの作成・更新を担当します。
 `status` 列を含めた記録を保存し、初回起動時に DB ファイルと親ディレクトリを自動生成します。
+アプリケーション起動時には既存のDB本体とWAL/ジャーナル関連ファイルを削除して、DBを空の状態から初期化します。
 DB 接続にはロックを掛け、書き込みとクローズの競合を防ぎます。
 
 ### `FrameReceiver`
@@ -50,7 +53,7 @@ DB 接続にはロックを掛け、書き込みとクローズの競合を防�
 
 ```mermaid
 flowchart LR
-    A[RTSP source / MediaMTX] --> B[FrameReceiver thread]
+    A[External H.264 RTP/UDP source] --> B[FrameReceiver thread]
     B --> C[Latest frame buffer]
     C --> D[SnapshotService]
     D --> E[cv2.imwrite JPEG]
@@ -58,6 +61,7 @@ flowchart LR
     F --> G[(SQLite snapshots table)]
     D --> H[logging.exception / logging.error]
     B --> I[Reconnect loop]
+    D --> J[External DB API /notify]
 ```
 
 ## マルチスレッド構成の目的

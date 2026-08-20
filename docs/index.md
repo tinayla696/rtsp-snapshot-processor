@@ -14,6 +14,8 @@ RTP/RTSP 配信を受信して、一定周期で最新フレームを JPEG と�
 ## 参照ページ
 
 - [アーキテクチャ](architecture.md)
+- [デプロイと運用](deployment.md)
+- [外部API仕様](api-spec.md)
 - [AI ガイドライン](ai_guidelines.md)
 - [使用方法](usage.md)
 - [テスト](testing.md)

@@ -63,6 +63,26 @@ def test_snapshot_repository_creates_db_and_persists_absolute_path(tmp_path: Pat
     assert row == (str(image_path.resolve()), "2026-07-30 12:34:56.789", 1)
 
 
+def test_snapshot_repository_resets_database_on_startup(tmp_path: Path) -> None:
+    db_path = tmp_path / "snapshot_records.db"
+    first_repository = sp.SnapshotRepository(db_path)
+    first_repository.add_snapshot_record(
+        tmp_path / "old-snapshot.jpg",
+        "2026-07-30 12:34:56.789",
+        True,
+    )
+    first_repository.close()
+
+    second_repository = sp.SnapshotRepository(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT COUNT(*) FROM snapshots").fetchone()
+
+    second_repository.close()
+
+    assert row == (0,)
+
+
 def test_snapshot_service_writes_jpeg_and_registers_record(monkeypatch, tmp_path: Path) -> None:
     repository = DummyRepository()
     receiver = object()
@@ -120,6 +140,36 @@ def test_snapshot_service_registers_false_status_when_write_fails(monkeypatch, t
     assert status is False
 
 
+def test_snapshot_service_notifies_external_api_after_success(monkeypatch, tmp_path: Path) -> None:
+    repository = DummyRepository()
+    receiver = object()
+    notifications: list[tuple[Path, str]] = []
+
+    class StubNotifier:
+        def notify(self, file_path: Path, timestamp_text: str) -> None:
+            notifications.append((file_path, timestamp_text))
+
+    service = sp.SnapshotService(
+        receiver=receiver,
+        repository=repository,
+        save_dir=tmp_path,
+        snapshot_interval_sec=5.0,
+        jpeg_quality=90,
+        notifier=StubNotifier(),
+    )
+
+    monkeypatch.setattr(sp.cv2, "imwrite", lambda *args, **kwargs: True)
+    monkeypatch.setattr(sp, "datetime", FixedDatetime)
+
+    service._persist_snapshot("frame-bytes")
+
+    assert len(repository.records) == 1
+    assert len(notifications) == 1
+    file_path, timestamp_text = notifications[0]
+    assert file_path == repository.records[0][0]
+    assert timestamp_text == "2026-07-30 12:34:56.789"
+
+
 def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
@@ -138,6 +188,8 @@ def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
             "88",
             "--reconnect-delay",
             "1.5",
+            "--notification-url",
+            "https://example.test/notify",
             "--log-level",
             "DEBUG",
         ],
@@ -152,6 +204,76 @@ def test_parse_args_maps_cli_to_config(monkeypatch) -> None:
     assert config.capture_backend == "auto"
     assert config.jpeg_quality == 88
     assert config.reconnect_delay_sec == 1.5
+    assert config.notification_url == "https://example.test/notify"
+
+
+def test_parse_args_supports_rtp_without_rtsp_url(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "stream_processor.py",
+            "--capture-backend",
+            "rtp",
+            "--rtp-port",
+            "5004",
+            "--rtp-width",
+            "1280",
+            "--rtp-height",
+            "720",
+        ],
+    )
+
+    config = sp.parse_args()
+
+    assert config.capture_backend == "rtp"
+    assert config.rtsp_url == ""
+    assert config.rtp_port == 5004
+    assert config.rtp_width == 1280
+    assert config.rtp_height == 720
+
+
+def test_frame_receiver_builds_h264_rtp_sdp() -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        rtp_port=5004,
+        rtp_payload_type=96,
+        rtp_clock_rate=90000,
+    )
+
+    sdp = receiver._build_rtp_sdp()
+
+    assert "m=video 5004 RTP/AVP 96" in sdp
+    assert "a=rtpmap:96 H264/90000" in sdp
+    assert "a=fmtp:96 packetization-mode=1" in sdp
+
+
+def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(monkeypatch) -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        reconnect_delay_sec=0.001,
+    )
+    receiver._rtp_process = object()
+    open_calls = 0
+
+    def fail_if_reopened() -> bool:
+        nonlocal open_calls
+        open_calls += 1
+        return False
+
+    monkeypatch.setattr(receiver, "_open_capture", fail_if_reopened)
+    monkeypatch.setattr(receiver, "_read_rtp_frame", lambda: None)
+
+    def stop_after_one_release() -> None:
+        receiver._rtp_process = None
+        receiver._stop_event.set()
+
+    monkeypatch.setattr(receiver, "_release_rtp_process", stop_after_one_release)
+    receiver._run()
+
+    assert open_calls == 0
 
 
 def test_parse_args_loads_values_from_toml_config(tmp_path: Path, monkeypatch) -> None:

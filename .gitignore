@@ -25,6 +25,7 @@ Thumbs.db
 *.db
 *.bak
 *.backup
+docker-data/
 
 # Temporary files
 tmp/
