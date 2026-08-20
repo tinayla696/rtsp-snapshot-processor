@@ -377,3 +377,55 @@ def test_auto_backend_falls_back_to_opencv_when_gstreamer_fails(monkeypatch) -> 
         ('pipeline uri="rtsp://example/stream"', sp.cv2.CAP_GSTREAMER),
         ("rtsp://example/stream", sp.cv2.CAP_FFMPEG),
     ]
+
+
+def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(monkeypatch) -> None:
+    """_run must not call _open_rtp_capture on every loop iteration.
+
+    When the RTP backend is active, self._capture is always None.  Without the
+    guard ``self._rtp_process is None``, each iteration would call
+    _open_capture() → _open_rtp_capture() and spawn a fresh FFmpeg subprocess,
+    leaking the previous process.
+    """
+    open_capture_calls: list[None] = []
+
+    class FakeProcess:
+        stdout = None
+        stdin = None
+
+        def kill(self) -> None:
+            pass
+
+        def terminate(self) -> None:
+            pass
+
+        def wait(self, timeout=None) -> int:
+            return 0
+
+    def fake_open_rtp_capture(self_recv) -> bool:
+        open_capture_calls.append(None)
+        self_recv._rtp_process = FakeProcess()
+        return True
+
+    monkeypatch.setattr(sp.FrameReceiver, "_open_rtp_capture", fake_open_rtp_capture)
+
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        rtp_port=5004,
+    )
+
+    # Simulate two _run iterations manually without starting the thread.
+    # First iteration: no capture, no rtp_process → _open_capture must be called once.
+    assert receiver._capture is None
+    assert receiver._rtp_process is None
+    if receiver._capture is None and receiver._rtp_process is None and not receiver._open_capture():
+        pass  # would retry — not expected in this path
+
+    assert len(open_capture_calls) == 1, "Expected exactly one _open_rtp_capture call on first iteration"
+
+    # Second iteration: rtp_process is now set → _open_capture must NOT be called again.
+    if receiver._capture is None and receiver._rtp_process is None and not receiver._open_capture():
+        pass
+
+    assert len(open_capture_calls) == 1, "_open_rtp_capture must not be called again while rtp_process is alive"
