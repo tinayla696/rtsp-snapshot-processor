@@ -63,6 +63,26 @@ def test_snapshot_repository_creates_db_and_persists_absolute_path(tmp_path: Pat
     assert row == (str(image_path.resolve()), "2026-07-30 12:34:56.789", 1)
 
 
+def test_snapshot_repository_resets_database_on_startup(tmp_path: Path) -> None:
+    db_path = tmp_path / "snapshot_records.db"
+    first_repository = sp.SnapshotRepository(db_path)
+    first_repository.add_snapshot_record(
+        tmp_path / "old-snapshot.jpg",
+        "2026-07-30 12:34:56.789",
+        True,
+    )
+    first_repository.close()
+
+    second_repository = sp.SnapshotRepository(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT COUNT(*) FROM snapshots").fetchone()
+
+    second_repository.close()
+
+    assert row == (0,)
+
+
 def test_snapshot_service_writes_jpeg_and_registers_record(monkeypatch, tmp_path: Path) -> None:
     repository = DummyRepository()
     receiver = object()

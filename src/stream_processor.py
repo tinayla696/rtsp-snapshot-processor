@@ -61,6 +61,7 @@ class SnapshotRepository:
 
     def _initialize(self) -> None:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._reset_database()
         self._connection = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._connection.execute("PRAGMA journal_mode=WAL;")
         self._connection.execute(
@@ -74,6 +75,19 @@ class SnapshotRepository:
         )
         self._ensure_status_column()
         self._connection.commit()
+
+    def _reset_database(self) -> None:
+        for database_path in (
+            self._db_path,
+            Path(f"{self._db_path}-wal"),
+            Path(f"{self._db_path}-shm"),
+            Path(f"{self._db_path}-journal"),
+        ):
+            try:
+                database_path.unlink(missing_ok=True)
+            except OSError as exc:
+                logging.error("Failed to reset SQLite database file %s: %s", database_path, exc)
+                raise
 
     def _ensure_status_column(self) -> None:
         if self._connection is None:

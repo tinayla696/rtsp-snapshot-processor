@@ -33,6 +33,8 @@ cp stream_processor.toml.example stream_processor.toml
 | `rtp_width` | `1280` | FFmpegから受け取るフレーム幅。 |
 | `rtp_height` | `720` | FFmpegから受け取るフレーム高さ。 |
 
+アプリケーション起動時に、`db_path` の既存SQLiteファイルとWAL/ジャーナル関連ファイルを削除し、空の `snapshots` テーブルを再作成します。前回起動分のスナップショット履歴は保持されません。
+
 外部端末から生 RTP/UDP を受信する場合、配信先はDockerコンテナ名ではなく、Dockerを実行するホストのLAN IPとUDPポートです。現在のComposeは受信ホストのUDP `5004` をアプリコンテナへ公開しています。
 
 ```text
