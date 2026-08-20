@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import subprocess
 import signal
 import sqlite3
 import threading
@@ -22,6 +23,7 @@ except ImportError:  # Python 3.10 fallback
     import tomli as tomllib
 
 import cv2
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,11 @@ class AppConfig:
     jpeg_quality: int = 95
     reconnect_delay_sec: float = 1.0
     notification_url: Optional[str] = None
+    rtp_port: int = 5004
+    rtp_payload_type: int = 96
+    rtp_clock_rate: int = 90000
+    rtp_width: int = 1280
+    rtp_height: int = 720
 
 
 @dataclass(frozen=True)
@@ -107,6 +114,11 @@ class FrameReceiver:
         reconnect_delay_sec: float = 1.0,
         capture_backend: str = "auto",
         gstreamer_pipeline_template: Optional[str] = None,
+        rtp_port: int = 5004,
+        rtp_payload_type: int = 96,
+        rtp_clock_rate: int = 90000,
+        rtp_width: int = 1280,
+        rtp_height: int = 720,
     ) -> None:
         self._stream_url = stream_url
         self._reconnect_delay_sec = reconnect_delay_sec
@@ -115,8 +127,15 @@ class FrameReceiver:
             gstreamer_pipeline_template
             or 'uridecodebin uri="{url}" ! videoconvert ! appsink max-buffers=1 drop=true sync=false'
         )
+        self._rtp_port = rtp_port
+        self._rtp_payload_type = rtp_payload_type
+        self._rtp_clock_rate = rtp_clock_rate
+        self._rtp_width = rtp_width
+        self._rtp_height = rtp_height
         self._latest_frame = None
         self._capture: Optional[cv2.VideoCapture] = None
+        self._rtp_process: Optional[subprocess.Popen[bytes]] = None
+        self._rtp_frame_size = rtp_width * rtp_height * 3
         self._active_backend_name = "unknown"
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -129,6 +148,7 @@ class FrameReceiver:
         self._stop_event.set()
         self._thread.join(timeout=5.0)
         self._release_capture()
+        self._release_rtp_process()
 
     def get_latest_frame(self):
         with self._lock:
@@ -138,6 +158,9 @@ class FrameReceiver:
 
     def _open_capture(self) -> bool:
         self._release_capture()
+
+        if self._capture_backend == "rtp":
+            return self._open_rtp_capture()
 
         for target in self._build_capture_targets():
             if target.api_preference is None:
@@ -166,6 +189,63 @@ class FrameReceiver:
 
         logging.warning("Failed to open stream: %s", self._stream_url)
         return False
+
+    def _open_rtp_capture(self) -> bool:
+        sdp = self._build_rtp_sdp()
+        frame_size = self._rtp_width * self._rtp_height * 3
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-protocol_whitelist",
+            "file,pipe,udp,rtp",
+            "-f",
+            "sdp",
+            "-i",
+            "pipe:0",
+            "-an",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-vf",
+            f"scale={self._rtp_width}:{self._rtp_height}",
+            "pipe:1",
+        ]
+        try:
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            if process.stdin is None or process.stdout is None:
+                process.kill()
+                return False
+            process.stdin.write(sdp.encode("ascii"))
+            process.stdin.close()
+        except (OSError, subprocess.SubprocessError):
+            logging.exception("Failed to start FFmpeg RTP receiver on UDP port %s", self._rtp_port)
+            return False
+
+        self._rtp_process = process
+        self._rtp_frame_size = frame_size
+        logging.info("RTP receiver listening on UDP port %s", self._rtp_port)
+        return True
+
+    def _build_rtp_sdp(self) -> str:
+        return (
+            "v=0\n"
+            "o=- 0 0 IN IP4 127.0.0.1\n"
+            "s=rtsp-snapshot-processor\n"
+            "c=IN IP4 0.0.0.0\n"
+            "t=0 0\n"
+            f"m=video {self._rtp_port} RTP/AVP {self._rtp_payload_type}\n"
+            f"a=rtpmap:{self._rtp_payload_type} H264/{self._rtp_clock_rate}\n"
+            f"a=fmtp:{self._rtp_payload_type} packetization-mode=1\n"
+            "a=recvonly\n"
+        )
 
     def _build_capture_targets(self) -> list[CaptureTarget]:
         if self._capture_backend == "gstreamer":
@@ -207,6 +287,27 @@ class FrameReceiver:
             self._capture.release()
             self._capture = None
 
+    def _release_rtp_process(self) -> None:
+        if self._rtp_process is None:
+            return
+        self._rtp_process.terminate()
+        try:
+            self._rtp_process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            self._rtp_process.kill()
+            self._rtp_process.wait()
+        self._rtp_process = None
+
+    def _read_rtp_frame(self):
+        if self._rtp_process is None or self._rtp_process.stdout is None:
+            return None
+        frame_bytes = self._rtp_process.stdout.read(self._rtp_frame_size)
+        if len(frame_bytes) != self._rtp_frame_size:
+            return None
+        return np.frombuffer(frame_bytes, dtype=np.uint8).reshape(
+            (self._rtp_height, self._rtp_width, 3)
+        ).copy()
+
     def _run(self) -> None:
         while not self._stop_event.is_set():
             if self._capture is None and not self._open_capture():
@@ -214,6 +315,16 @@ class FrameReceiver:
                 continue
 
             if self._capture is None:
+                if self._rtp_process is None:
+                    continue
+                frame = self._read_rtp_frame()
+                if frame is None:
+                    logging.warning("RTP frame receive failed. Restarting receiver...")
+                    self._release_rtp_process()
+                    time.sleep(self._reconnect_delay_sec)
+                    continue
+                with self._lock:
+                    self._latest_frame = frame
                 continue
 
             ok, frame = self._capture.read()
@@ -342,6 +453,11 @@ class StreamProcessorApplication:
             reconnect_delay_sec=config.reconnect_delay_sec,
             capture_backend=config.capture_backend,
             gstreamer_pipeline_template=config.gstreamer_pipeline_template,
+            rtp_port=config.rtp_port,
+            rtp_payload_type=config.rtp_payload_type,
+            rtp_clock_rate=config.rtp_clock_rate,
+            rtp_width=config.rtp_width,
+            rtp_height=config.rtp_height,
         )
         self._snapshot_service = SnapshotService(
             receiver=self._receiver,
@@ -403,7 +519,7 @@ def parse_args() -> AppConfig:
         parents=[bootstrap_parser],
         description="Receive RTSP/RTP stream and store periodic JPEG snapshots with SQLite records."
     )
-    parser.add_argument("--rtsp-url", default=config_data.get("rtsp_url"), help="RTSP/RTP stream URL")
+    parser.add_argument("--rtsp-url", default=config_data.get("rtsp_url", ""), help="RTSP stream URL")
     parser.add_argument(
         "--snapshot-interval",
         type=float,
@@ -423,8 +539,8 @@ def parse_args() -> AppConfig:
     parser.add_argument(
         "--capture-backend",
         default=str(config_data.get("capture_backend", "auto")),
-        choices=["auto", "gstreamer", "opencv"],
-        help="Capture backend. auto prefers GStreamer, then OpenCV.",
+        choices=["auto", "gstreamer", "opencv", "rtp"],
+        help="Capture backend. auto prefers GStreamer, then OpenCV; rtp receives H.264 RTP/UDP via FFmpeg.",
     )
     parser.add_argument(
         "--gstreamer-pipeline-template",
@@ -449,6 +565,36 @@ def parse_args() -> AppConfig:
         help="Optional external HTTP endpoint receiving JSON payloads with file_path and timestamp when snapshots are saved.",
     )
     parser.add_argument(
+        "--rtp-port",
+        type=int,
+        default=int(config_data.get("rtp_port", 5004)),
+        help="UDP port for H.264 RTP input when --capture-backend=rtp",
+    )
+    parser.add_argument(
+        "--rtp-payload-type",
+        type=int,
+        default=int(config_data.get("rtp_payload_type", 96)),
+        help="RTP payload type for H.264 input",
+    )
+    parser.add_argument(
+        "--rtp-clock-rate",
+        type=int,
+        default=int(config_data.get("rtp_clock_rate", 90000)),
+        help="RTP clock rate for H.264 input",
+    )
+    parser.add_argument(
+        "--rtp-width",
+        type=int,
+        default=int(config_data.get("rtp_width", 1280)),
+        help="Decoded RTP frame width",
+    )
+    parser.add_argument(
+        "--rtp-height",
+        type=int,
+        default=int(config_data.get("rtp_height", 720)),
+        help="Decoded RTP frame height",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -457,14 +603,22 @@ def parse_args() -> AppConfig:
 
     args = parser.parse_args()
 
-    if args.rtsp_url is None:
-        parser.error("--rtsp-url is required either on the command line or in the config file")
+    if args.capture_backend != "rtp" and not args.rtsp_url:
+        parser.error("--rtsp-url is required unless --capture-backend=rtp")
     if args.snapshot_interval <= 0:
         parser.error("--snapshot-interval must be > 0")
     if not (0 <= args.jpeg_quality <= 100):
         parser.error("--jpeg-quality must be between 0 and 100")
     if args.reconnect_delay <= 0:
         parser.error("--reconnect-delay must be > 0")
+    if not (1 <= args.rtp_port <= 65535):
+        parser.error("--rtp-port must be between 1 and 65535")
+    if not (0 <= args.rtp_payload_type <= 127):
+        parser.error("--rtp-payload-type must be between 0 and 127")
+    if args.rtp_clock_rate <= 0:
+        parser.error("--rtp-clock-rate must be > 0")
+    if args.rtp_width <= 0 or args.rtp_height <= 0:
+        parser.error("--rtp-width and --rtp-height must be > 0")
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),
@@ -482,6 +636,11 @@ def parse_args() -> AppConfig:
         jpeg_quality=args.jpeg_quality,
         reconnect_delay_sec=args.reconnect_delay,
         notification_url=args.notification_url,
+        rtp_port=args.rtp_port,
+        rtp_payload_type=args.rtp_payload_type,
+        rtp_clock_rate=args.rtp_clock_rate,
+        rtp_width=args.rtp_width,
+        rtp_height=args.rtp_height,
     )
 
 
