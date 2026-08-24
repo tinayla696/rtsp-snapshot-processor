@@ -1,5 +1,6 @@
 services:
   test-api:
+    profiles: ["test"]
     image: python:3.12-slim
     working_dir: /app
     volumes:
@@ -10,8 +11,6 @@ services:
       PORT: 8000
       NOTIFY_LOG_PATH: /data/notifications.log
     command: python /app/test_api_server.py
-    ports:
-      - "8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 10s
@@ -22,12 +21,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    depends_on:
-      test-api:
-        condition: service_healthy
     environment:
-      RTSP_URL: ${RTSP_URL:-}
-      NOTIFICATION_URL: ${NOTIFICATION_URL:-http://test-api:8000/notify}
+      RTSP_URL: ${RTSP_URL:-rtp://192.168.11.122:5004}
+      NOTIFICATION_URL: ${NOTIFICATION_URL:-http://backend:8000/api/v1/snapshots/notify}
       SAVE_DIR: /data/snapshots
       DB_PATH: /data/snapshot_records.db
       SNAPSHOT_INTERVAL_SEC: ${SNAPSHOT_INTERVAL_SEC:-5}
@@ -42,9 +38,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - backend
     volumes:
       - .:/workspace
       - ./docker-data:/data
+      - snapshot-data:/data/snapshots
     ports:
       - "5004:5004/udp"
     working_dir: /workspace
@@ -65,3 +65,13 @@ services:
       --rtp-height \"$$RTP_HEIGHT\"
       --log-level \"$$LOG_LEVEL\""
     restart: unless-stopped
+
+networks:
+  backend:
+    external: true
+    name: ylm-empathy-backend_default
+
+volumes:
+  snapshot-data:
+    external: true
+    name: snapshot-data
