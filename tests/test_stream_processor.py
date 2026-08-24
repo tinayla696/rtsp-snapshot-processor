@@ -249,6 +249,18 @@ def test_frame_receiver_builds_h264_rtp_sdp() -> None:
     assert "a=fmtp:96 packetization-mode=1" in sdp
 
 
+def test_frame_receiver_uses_low_latency_corrupt_packet_options() -> None:
+    receiver = sp.FrameReceiver(stream_url="", capture_backend="rtp")
+
+    command = receiver._build_rtp_command()
+
+    assert ["-fflags", "+nobuffer+discardcorrupt"] == command[command.index("-fflags"):command.index("-fflags") + 2]
+    assert ["-probesize", "32"] == command[command.index("-probesize"):command.index("-probesize") + 2]
+    assert ["-analyzeduration", "0"] == command[command.index("-analyzeduration"):command.index("-analyzeduration") + 2]
+    assert ["-reorder_queue_size", "0"] == command[command.index("-reorder_queue_size"):command.index("-reorder_queue_size") + 2]
+    assert ["-vsync", "0"] == command[command.index("-vsync"):command.index("-vsync") + 2]
+
+
 def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(monkeypatch) -> None:
     receiver = sp.FrameReceiver(
         stream_url="",

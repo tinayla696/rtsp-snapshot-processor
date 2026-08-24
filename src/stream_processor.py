@@ -208,26 +208,7 @@ class FrameReceiver:
     def _open_rtp_capture(self) -> bool:
         sdp = self._build_rtp_sdp()
         frame_size = self._rtp_width * self._rtp_height * 3
-        command = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-protocol_whitelist",
-            "file,pipe,udp,rtp",
-            "-f",
-            "sdp",
-            "-i",
-            "pipe:0",
-            "-an",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "bgr24",
-            "-vf",
-            f"scale={self._rtp_width}:{self._rtp_height}",
-            "pipe:1",
-        ]
+        command = self._build_rtp_command()
         try:
             process = subprocess.Popen(
                 command,
@@ -247,6 +228,40 @@ class FrameReceiver:
         self._rtp_frame_size = frame_size
         logging.info("RTP receiver listening on UDP port %s", self._rtp_port)
         return True
+
+    def _build_rtp_command(self) -> list[str]:
+        return [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-protocol_whitelist",
+            "file,pipe,udp,rtp",
+            "-fflags",
+            "+nobuffer+discardcorrupt",
+            "-flags",
+            "low_delay",
+            "-probesize",
+            "32",
+            "-analyzeduration",
+            "0",
+            "-reorder_queue_size",
+            "0",
+            "-f",
+            "sdp",
+            "-i",
+            "pipe:0",
+            "-an",
+            "-vsync",
+            "0",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-vf",
+            f"scale={self._rtp_width}:{self._rtp_height}",
+            "pipe:1",
+        ]
 
     def _build_rtp_sdp(self) -> str:
         return (
