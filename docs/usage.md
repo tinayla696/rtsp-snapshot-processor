@@ -49,7 +49,28 @@ cp stream_processor.toml.example stream_processor.toml
 python src/stream_processor.py --config stream_processor.toml
 ```
 
-CLI 引数は TOML の設定を上書きします。
+CLI 引数は TOML の設定を上書きします。`--help` で全引数を確認できます。
+
+### CLI 引数一覧
+
+| 引数 | 対応 TOML キー | 説明 |
+| --- | --- | --- |
+| `--config` | — | TOML 設定ファイルパス。省略時は `./stream_processor.toml` を自動検索 |
+| `--rtsp-url` | `rtsp_url` | RTSP ストリーム URL（`capture_backend=rtp` 時は不要） |
+| `--snapshot-interval` | `snapshot_interval_sec` | スナップショット保存周期（秒） |
+| `--save-dir` | `save_dir` | JPEG 保存先ディレクトリ |
+| `--db-path` | `db_path` | SQLite DB ファイルパス |
+| `--capture-backend` | `capture_backend` | `auto` / `gstreamer` / `opencv` / `rtp` |
+| `--gstreamer-pipeline-template` | `gstreamer_pipeline_template` | GStreamer パイプラインテンプレート（`{url}` プレースホルダー） |
+| `--jpeg-quality` | `jpeg_quality` | JPEG 品質（0–100） |
+| `--reconnect-delay` | `reconnect_delay_sec` | 切断時の再接続待機秒数 |
+| `--notification-url` | `notification_url` | スナップショット保存成功時の通知先 URL |
+| `--rtp-port` | `rtp_port` | H.264 RTP/UDP 受信 UDP ポート |
+| `--rtp-payload-type` | `rtp_payload_type` | RTP payload type |
+| `--rtp-clock-rate` | `rtp_clock_rate` | RTP clock rate |
+| `--rtp-width` | `rtp_width` | デコード後のフレーム幅（px） |
+| `--rtp-height` | `rtp_height` | デコード後のフレーム高さ（px） |
+| `--log-level` | — | ログレベル `DEBUG` / `INFO` / `WARNING` / `ERROR`（既定: `INFO`） |
 
 ## 4. 同一LAN上の実機RTPを受信する
 
