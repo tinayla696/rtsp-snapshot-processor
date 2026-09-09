@@ -252,8 +252,6 @@ class FrameReceiver:
             "-i",
             "pipe:0",
             "-an",
-            "-vsync",
-            "0",
             "-f",
             "rawvideo",
             "-pix_fmt",
