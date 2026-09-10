@@ -46,7 +46,7 @@ services:
       - ./docker-data:/data
       - snapshot-data:/data/snapshots
     ports:
-      - "5004:5004/udp"
+      - "${RTP_PORT:-5004}:${RTP_PORT:-5004}/udp"
     working_dir: /workspace
     command: >
       sh -c "python src/stream_processor.py
