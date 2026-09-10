@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import shutil
 import subprocess
 import signal
 import sqlite3
@@ -43,6 +44,9 @@ class AppConfig:
     rtp_clock_rate: int = 90000
     rtp_width: int = 1280
     rtp_height: int = 720
+    rtp_engine: str = "gstreamer"
+    rtp_probe_size: int = 5000000
+    rtp_analyze_duration_us: int = 5000000
 
 
 @dataclass(frozen=True)
@@ -64,15 +68,13 @@ class SnapshotRepository:
         self._reset_database()
         self._connection = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._connection.execute("PRAGMA journal_mode=WAL;")
-        self._connection.execute(
-            """
+        self._connection.execute("""
             CREATE TABLE IF NOT EXISTS snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_path TEXT NOT NULL,
                 timestamp TEXT NOT NULL
             );
-            """
-        )
+            """)
         self._ensure_status_column()
         self._connection.commit()
 
@@ -86,7 +88,9 @@ class SnapshotRepository:
             try:
                 database_path.unlink(missing_ok=True)
             except OSError as exc:
-                logging.error("Failed to reset SQLite database file %s: %s", database_path, exc)
+                logging.error(
+                    "Failed to reset SQLite database file %s: %s", database_path, exc
+                )
                 raise
 
     def _ensure_status_column(self) -> None:
@@ -95,14 +99,18 @@ class SnapshotRepository:
 
         columns = {
             row[1]
-            for row in self._connection.execute("PRAGMA table_info(snapshots);").fetchall()
+            for row in self._connection.execute(
+                "PRAGMA table_info(snapshots);"
+            ).fetchall()
         }
         if "status" not in columns:
             self._connection.execute(
                 "ALTER TABLE snapshots ADD COLUMN status INTEGER NOT NULL DEFAULT 1;"
             )
 
-    def add_snapshot_record(self, file_path: Path, timestamp_text: str, status: bool) -> None:
+    def add_snapshot_record(
+        self, file_path: Path, timestamp_text: str, status: bool
+    ) -> None:
         if self._connection is None:
             raise RuntimeError("SQLite connection is not initialized.")
 
@@ -133,6 +141,9 @@ class FrameReceiver:
         rtp_clock_rate: int = 90000,
         rtp_width: int = 1280,
         rtp_height: int = 720,
+        rtp_engine: str = "gstreamer",
+        rtp_probe_size: int = 5000000,
+        rtp_analyze_duration_us: int = 5000000,
     ) -> None:
         self._stream_url = stream_url
         self._reconnect_delay_sec = reconnect_delay_sec
@@ -146,14 +157,20 @@ class FrameReceiver:
         self._rtp_clock_rate = rtp_clock_rate
         self._rtp_width = rtp_width
         self._rtp_height = rtp_height
+        self._rtp_engine = rtp_engine
+        self._rtp_probe_size = rtp_probe_size
+        self._rtp_analyze_duration_us = rtp_analyze_duration_us
         self._latest_frame = None
+        self._received_frame_count = 0
         self._capture: Optional[cv2.VideoCapture] = None
         self._rtp_process: Optional[subprocess.Popen[bytes]] = None
         self._rtp_frame_size = rtp_width * rtp_height * 3
         self._active_backend_name = "unknown"
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="frame-receiver", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="frame-receiver", daemon=True
+        )
 
     def start(self) -> None:
         self._thread.start()
@@ -206,30 +223,78 @@ class FrameReceiver:
         return False
 
     def _open_rtp_capture(self) -> bool:
-        sdp = self._build_rtp_sdp()
         frame_size = self._rtp_width * self._rtp_height * 3
         command = self._build_rtp_command()
         try:
             process = subprocess.Popen(
                 command,
-                stdin=subprocess.PIPE,
+                stdin=(
+                    subprocess.PIPE
+                    if self._rtp_engine == "ffmpeg"
+                    else subprocess.DEVNULL
+                ),
                 stdout=subprocess.PIPE,
             )
-            if process.stdin is None or process.stdout is None:
+            if process.stdout is None:
                 process.kill()
                 return False
-            process.stdin.write(sdp.encode("ascii"))
-            process.stdin.close()
+            if self._rtp_engine == "ffmpeg":
+                if process.stdin is None:
+                    process.kill()
+                    return False
+                process.stdin.write(self._build_rtp_sdp().encode("ascii"))
+                process.stdin.close()
         except (OSError, subprocess.SubprocessError):
-            logging.exception("Failed to start FFmpeg RTP receiver on UDP port %s", self._rtp_port)
+            logging.exception(
+                "Failed to start %s RTP receiver on UDP port %s",
+                self._rtp_engine,
+                self._rtp_port,
+            )
             return False
 
         self._rtp_process = process
         self._rtp_frame_size = frame_size
-        logging.info("RTP receiver listening on UDP port %s", self._rtp_port)
+        logging.info(
+            "%s RTP receiver listening on UDP port %s", self._rtp_engine, self._rtp_port
+        )
         return True
 
     def _build_rtp_command(self) -> list[str]:
+        if self._rtp_engine == "gstreamer":
+            return self._build_gstreamer_rtp_command()
+        return self._build_ffmpeg_rtp_command()
+
+    def _build_gstreamer_rtp_command(self) -> list[str]:
+        gst_launch = shutil.which("gst-launch-1.0") or "gst-launch-1.0"
+        caps = (
+            "application/x-rtp,media=video,encoding-name=H264,"
+            f"payload={self._rtp_payload_type},clock-rate={self._rtp_clock_rate}"
+        )
+        return [
+            gst_launch,
+            "-q",
+            "udpsrc",
+            f"port={self._rtp_port}",
+            f"caps={caps}",
+            "!",
+            "rtph264depay",
+            "!",
+            "h264parse",
+            "!",
+            "avdec_h264",
+            "!",
+            "videoconvert",
+            "!",
+            "videoscale",
+            "!",
+            f"video/x-raw,format=BGR,width={self._rtp_width},height={self._rtp_height}",
+            "!",
+            "fdsink",
+            "fd=1",
+            "sync=false",
+        ]
+
+    def _build_ffmpeg_rtp_command(self) -> list[str]:
         return [
             "ffmpeg",
             "-hide_banner",
@@ -242,9 +307,9 @@ class FrameReceiver:
             "-flags",
             "low_delay",
             "-probesize",
-            "32",
+            str(self._rtp_probe_size),
             "-analyzeduration",
-            "0",
+            str(self._rtp_analyze_duration_us),
             "-reorder_queue_size",
             "0",
             "-f",
@@ -331,13 +396,19 @@ class FrameReceiver:
         frame_bytes = self._rtp_process.stdout.read(self._rtp_frame_size)
         if len(frame_bytes) != self._rtp_frame_size:
             return None
-        return np.frombuffer(frame_bytes, dtype=np.uint8).reshape(
-            (self._rtp_height, self._rtp_width, 3)
-        ).copy()
+        return (
+            np.frombuffer(frame_bytes, dtype=np.uint8)
+            .reshape((self._rtp_height, self._rtp_width, 3))
+            .copy()
+        )
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            if self._capture is None and self._rtp_process is None and not self._open_capture():
+            if (
+                self._capture is None
+                and self._rtp_process is None
+                and not self._open_capture()
+            ):
                 time.sleep(self._reconnect_delay_sec)
                 continue
 
@@ -352,6 +423,9 @@ class FrameReceiver:
                     continue
                 with self._lock:
                     self._latest_frame = frame
+                    self._received_frame_count += 1
+                    if self._received_frame_count == 1:
+                        logging.info("First RTP frame received: %s", frame.shape)
                 continue
 
             ok, frame = self._capture.read()
@@ -363,12 +437,17 @@ class FrameReceiver:
 
             with self._lock:
                 self._latest_frame = frame
+                self._received_frame_count += 1
+                if self._received_frame_count == 1:
+                    logging.info("First frame received: %s", frame.shape)
 
 
 class ExternalNotifier:
     def __init__(self, notification_url: Optional[str]) -> None:
         self._notification_url = (
-            notification_url.strip() if notification_url is not None and notification_url.strip() else None
+            notification_url.strip()
+            if notification_url is not None and notification_url.strip()
+            else None
         )
 
     def notify(self, file_path: Path, timestamp_text: str) -> None:
@@ -394,7 +473,7 @@ class ExternalNotifier:
                         response.status,
                         response.reason,
                         response.headers,
-                        fp=response
+                        fp=response,
                     )
         except Exception:
             logging.exception(
@@ -443,7 +522,9 @@ class SnapshotService:
                 try:
                     self._persist_snapshot(frame)
                 except Exception:
-                    logging.exception("Snapshot persistence failed; continuing execution.")
+                    logging.exception(
+                        "Snapshot persistence failed; continuing execution."
+                    )
 
             next_tick += self._snapshot_interval_sec
             if next_tick < time.monotonic():
@@ -485,6 +566,9 @@ class StreamProcessorApplication:
             rtp_clock_rate=config.rtp_clock_rate,
             rtp_width=config.rtp_width,
             rtp_height=config.rtp_height,
+            rtp_engine=config.rtp_engine,
+            rtp_probe_size=config.rtp_probe_size,
+            rtp_analyze_duration_us=config.rtp_analyze_duration_us,
         )
         self._snapshot_service = SnapshotService(
             receiver=self._receiver,
@@ -544,9 +628,11 @@ def parse_args() -> AppConfig:
 
     parser = argparse.ArgumentParser(
         parents=[bootstrap_parser],
-        description="Receive RTSP/RTP stream and store periodic JPEG snapshots with SQLite records."
+        description="Receive RTSP/RTP stream and store periodic JPEG snapshots with SQLite records.",
     )
-    parser.add_argument("--rtsp-url", default=config_data.get("rtsp_url", ""), help="RTSP stream URL")
+    parser.add_argument(
+        "--rtsp-url", default=config_data.get("rtsp_url", ""), help="RTSP stream URL"
+    )
     parser.add_argument(
         "--snapshot-interval",
         type=float,
@@ -622,10 +708,28 @@ def parse_args() -> AppConfig:
         help="Decoded RTP frame height",
     )
     parser.add_argument(
+        "--rtp-engine",
+        default=str(config_data.get("rtp_engine", "gstreamer")),
+        choices=["gstreamer", "ffmpeg"],
+        help="RTP receive engine. gstreamer matches the validated Check-RtpStreaming pipeline; ffmpeg uses SDP input.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level",
+    )
+    parser.add_argument(
+        "--rtp-probe-size",
+        type=int,
+        default=int(config_data.get("rtp_probe_size", 5000000)),
+        help="FFmpeg probesize in bytes used to detect the RTP video stream",
+    )
+    parser.add_argument(
+        "--rtp-analyze-duration",
+        type=int,
+        default=int(config_data.get("rtp_analyze_duration_us", 5000000)),
+        help="FFmpeg analyzeduration in microseconds used to detect the RTP video stream",
     )
 
     args = parser.parse_args()
@@ -646,6 +750,10 @@ def parse_args() -> AppConfig:
         parser.error("--rtp-clock-rate must be > 0")
     if args.rtp_width <= 0 or args.rtp_height <= 0:
         parser.error("--rtp-width and --rtp-height must be > 0")
+    if args.rtp_probe_size <= 0:
+        parser.error("--rtp-probe-size must be > 0")
+    if args.rtp_analyze_duration < 0:
+        parser.error("--rtp-analyze-duration must be >= 0")
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),
@@ -668,6 +776,9 @@ def parse_args() -> AppConfig:
         rtp_clock_rate=args.rtp_clock_rate,
         rtp_width=args.rtp_width,
         rtp_height=args.rtp_height,
+        rtp_engine=args.rtp_engine,
+        rtp_probe_size=args.rtp_probe_size,
+        rtp_analyze_duration_us=args.rtp_analyze_duration,
     )
 
 

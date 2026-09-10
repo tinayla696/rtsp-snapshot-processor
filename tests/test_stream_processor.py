@@ -14,7 +14,9 @@ class DummyRepository:
     def __init__(self) -> None:
         self.records: list[tuple[Path, str, bool]] = []
 
-    def add_snapshot_record(self, file_path: Path, timestamp_text: str, status: bool) -> None:
+    def add_snapshot_record(
+        self, file_path: Path, timestamp_text: str, status: bool
+    ) -> None:
         self.records.append((file_path, timestamp_text, status))
 
 
@@ -43,7 +45,9 @@ class FakeCapture:
         pass
 
 
-def test_snapshot_repository_creates_db_and_persists_absolute_path(tmp_path: Path) -> None:
+def test_snapshot_repository_creates_db_and_persists_absolute_path(
+    tmp_path: Path,
+) -> None:
     db_path = tmp_path / "nested" / "snapshot_records.db"
     repository = sp.SnapshotRepository(db_path)
 
@@ -83,7 +87,9 @@ def test_snapshot_repository_resets_database_on_startup(tmp_path: Path) -> None:
     assert row == (0,)
 
 
-def test_snapshot_service_writes_jpeg_and_registers_record(monkeypatch, tmp_path: Path) -> None:
+def test_snapshot_service_writes_jpeg_and_registers_record(
+    monkeypatch, tmp_path: Path
+) -> None:
     repository = DummyRepository()
     receiver = object()
     service = sp.SnapshotService(
@@ -109,12 +115,12 @@ def test_snapshot_service_writes_jpeg_and_registers_record(monkeypatch, tmp_path
     saved_path = Path(calls[0][0])
     assert saved_path.is_absolute()
     assert saved_path.suffix == ".jpg"
-    assert repository.records == [
-        (saved_path, "2026-07-30 12:34:56.789", True)
-    ]
+    assert repository.records == [(saved_path, "2026-07-30 12:34:56.789", True)]
 
 
-def test_snapshot_service_registers_false_status_when_write_fails(monkeypatch, tmp_path: Path) -> None:
+def test_snapshot_service_registers_false_status_when_write_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
     repository = DummyRepository()
     receiver = object()
     service = sp.SnapshotService(
@@ -140,7 +146,9 @@ def test_snapshot_service_registers_false_status_when_write_fails(monkeypatch, t
     assert status is False
 
 
-def test_snapshot_service_notifies_external_api_after_success(monkeypatch, tmp_path: Path) -> None:
+def test_snapshot_service_notifies_external_api_after_success(
+    monkeypatch, tmp_path: Path
+) -> None:
     repository = DummyRepository()
     receiver = object()
     notifications: list[tuple[Path, str]] = []
@@ -231,6 +239,7 @@ def test_parse_args_supports_rtp_without_rtsp_url(monkeypatch) -> None:
     assert config.rtp_port == 5004
     assert config.rtp_width == 1280
     assert config.rtp_height == 720
+    assert config.rtp_engine == "gstreamer"
 
 
 def test_frame_receiver_builds_h264_rtp_sdp() -> None:
@@ -250,18 +259,68 @@ def test_frame_receiver_builds_h264_rtp_sdp() -> None:
 
 
 def test_frame_receiver_uses_low_latency_corrupt_packet_options() -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="", capture_backend="rtp", rtp_engine="ffmpeg"
+    )
+
+    command = receiver._build_rtp_command()
+
+    assert ["-fflags", "+nobuffer+discardcorrupt"] == command[
+        command.index("-fflags") : command.index("-fflags") + 2
+    ]
+    assert ["-probesize", "5000000"] == command[
+        command.index("-probesize") : command.index("-probesize") + 2
+    ]
+    assert ["-analyzeduration", "5000000"] == command[
+        command.index("-analyzeduration") : command.index("-analyzeduration") + 2
+    ]
+    assert ["-reorder_queue_size", "0"] == command[
+        command.index("-reorder_queue_size") : command.index("-reorder_queue_size") + 2
+    ]
+    assert "-vsync" not in command
+
+
+def test_frame_receiver_uses_gstreamer_rtp_pipeline_by_default() -> None:
     receiver = sp.FrameReceiver(stream_url="", capture_backend="rtp")
 
     command = receiver._build_rtp_command()
 
-    assert ["-fflags", "+nobuffer+discardcorrupt"] == command[command.index("-fflags"):command.index("-fflags") + 2]
-    assert ["-probesize", "32"] == command[command.index("-probesize"):command.index("-probesize") + 2]
-    assert ["-analyzeduration", "0"] == command[command.index("-analyzeduration"):command.index("-analyzeduration") + 2]
-    assert ["-reorder_queue_size", "0"] == command[command.index("-reorder_queue_size"):command.index("-reorder_queue_size") + 2]
-    assert "-vsync" not in command
+    assert command[0].lower().endswith(("gst-launch-1.0", "gst-launch-1.0.exe"))
+    assert command[1:5] == [
+        "-q",
+        "udpsrc",
+        "port=5004",
+        "caps=application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000",
+    ]
+    assert "rtph264depay" in command
+    assert "h264parse" in command
+    assert "avdec_h264" in command
+    assert "video/x-raw,format=BGR,width=1280,height=720" in command
+    assert ["fdsink", "fd=1", "sync=false"] == command[-3:]
 
 
-def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(monkeypatch) -> None:
+def test_frame_receiver_rtp_probe_window_is_configurable() -> None:
+    receiver = sp.FrameReceiver(
+        stream_url="",
+        capture_backend="rtp",
+        rtp_engine="ffmpeg",
+        rtp_probe_size=123456,
+        rtp_analyze_duration_us=654321,
+    )
+
+    command = receiver._build_rtp_command()
+
+    assert ["-probesize", "123456"] == command[
+        command.index("-probesize") : command.index("-probesize") + 2
+    ]
+    assert ["-analyzeduration", "654321"] == command[
+        command.index("-analyzeduration") : command.index("-analyzeduration") + 2
+    ]
+
+
+def test_rtp_run_loop_does_not_respawn_ffmpeg_process_on_every_iteration(
+    monkeypatch,
+) -> None:
     receiver = sp.FrameReceiver(
         stream_url="",
         capture_backend="rtp",

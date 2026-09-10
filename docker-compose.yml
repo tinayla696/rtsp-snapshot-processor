@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      RTSP_URL: ${RTSP_URL:-rtp://192.168.11.122:5004}
+      RTSP_URL: ${RTSP_URL:-rtp://192.168.200.100:5004}
       NOTIFICATION_URL: ${NOTIFICATION_URL:-http://backend:8000/api/v1/snapshots/notify}
       SAVE_DIR: /data/snapshots
       DB_PATH: /data/snapshot_records.db
@@ -35,6 +35,9 @@ services:
       RTP_CLOCK_RATE: ${RTP_CLOCK_RATE:-90000}
       RTP_WIDTH: ${RTP_WIDTH:-1280}
       RTP_HEIGHT: ${RTP_HEIGHT:-720}
+      RTP_ENGINE: ${RTP_ENGINE:-gstreamer}
+      RTP_PROBE_SIZE: ${RTP_PROBE_SIZE:-5000000}
+      RTP_ANALYZE_DURATION: ${RTP_ANALYZE_DURATION:-5000000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -44,7 +47,6 @@ services:
     volumes:
       - .:/workspace
       - ./docker-data:/data
-      - snapshot-data:/data/snapshots
     ports:
       - "${RTP_PORT:-5004}:${RTP_PORT:-5004}/udp"
     working_dir: /workspace
@@ -63,6 +65,9 @@ services:
       --rtp-clock-rate \"$$RTP_CLOCK_RATE\"
       --rtp-width \"$$RTP_WIDTH\"
       --rtp-height \"$$RTP_HEIGHT\"
+      --rtp-engine "$$RTP_ENGINE"
+      --rtp-probe-size \"$$RTP_PROBE_SIZE\"
+      --rtp-analyze-duration \"$$RTP_ANALYZE_DURATION\"
       --log-level \"$$LOG_LEVEL\""
     restart: unless-stopped
 
@@ -70,8 +75,3 @@ networks:
   backend:
     external: true
     name: ylm-empathy-backend_default
-
-volumes:
-  snapshot-data:
-    external: true
-    name: snapshot-data
