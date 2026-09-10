@@ -19,7 +19,7 @@ cp stream_processor.toml.example stream_processor.toml
 | キー | 既定値 | 説明 |
 | --- | --- | --- |
 | `rtsp_url` | RTSP利用時は必須 | 受信対象の RTSP URL。`capture_backend=rtp` の場合は空欄で構いません。 |
-| `snapshot_interval_sec` | `5.0` | スナップショット保存周期（秒）。 |
+| `snapshot_interval_sec` | `60.0` | スナップショット保存周期（秒）。 |
 | `save_dir` | `./snapshots` | JPEG の保存先ディレクトリ。初回実行時に自動生成されます。 |
 | `db_path` | `./snapshot_records.db` | SQLite DB の保存先。初回実行時に自動生成されます。 |
 | `capture_backend` | `auto` | `auto` / `gstreamer` / `opencv` / `rtp`。`rtp` は FFmpegでH.264 RTP/UDPを受信します。 |

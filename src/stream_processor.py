@@ -636,7 +636,7 @@ def parse_args() -> AppConfig:
     parser.add_argument(
         "--snapshot-interval",
         type=float,
-        default=float(config_data.get("snapshot_interval_sec", 5.0)),
+        default=float(config_data.get("snapshot_interval_sec", 60.0)),
         help="Snapshot interval in seconds",
     )
     parser.add_argument(

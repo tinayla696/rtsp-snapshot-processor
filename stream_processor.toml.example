@@ -1,7 +1,7 @@
 # Copy this file to stream_processor.toml and edit values for your environment.
 
 rtsp_url = "rtp://192.168.11.122:5004"
-snapshot_interval_sec = 5.0
+snapshot_interval_sec = 60.0
 save_dir = "./snapshots"
 db_path = "./snapshot_records.db"
 capture_backend = "rtp"

@@ -42,7 +42,7 @@ python -m pip install -r requirements.txt
 
 ```toml
 rtsp_url = ""
-snapshot_interval_sec = 5.0
+snapshot_interval_sec = 60.0
 save_dir = "C:/rtsp-snapshot-processor/data/snapshots"
 db_path = "C:/rtsp-snapshot-processor/data/snapshot_records.db"
 capture_backend = "rtp"
@@ -141,7 +141,7 @@ nano stream_processor.toml
 
 ```toml
 rtsp_url = ""
-snapshot_interval_sec = 5.0
+snapshot_interval_sec = 60.0
 save_dir = "/var/lib/rtsp-snapshot-processor/snapshots"
 db_path = "/var/lib/rtsp-snapshot-processor/snapshot_records.db"
 capture_backend = "rtp"
@@ -348,7 +348,7 @@ python -m pip install -r requirements.txt
 
 ```toml
 rtsp_url = ""
-snapshot_interval_sec = 5.0
+snapshot_interval_sec = 60.0
 save_dir = "C:/rtsp-snapshot-processor/data/snapshots"
 db_path = "C:/rtsp-snapshot-processor/data/snapshot_records.db"
 capture_backend = "rtp"
